@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="免费离线的高中蹭饭图生成器：导入学生名单，按大学所在省份自动分组、排版连线，内置完整中国地图、多主题与艺术字标题，手动微调后一键导出 PNG/PDF。">
+<meta name="theme-color" content="#1f2733">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231f2733'/%3E%3Cpath d='M5 16h22c0 6-5 10-11 10S5 22 5 16z' fill='%23f8fafc'/%3E%3Cpath d='M8 15c1.5-4.5 4.5-7 8-7s6.5 2.5 8 7z' fill='%233b82f6'/%3E%3C/svg%3E">
+<meta property="og:type" content="website">
+<meta property="og:title" content="高中蹭饭图生成器">
+<meta property="og:description" content="免费离线的高中蹭饭图生成器：导入名单按省份分组，内置中国地图，导出 PNG/PDF。">
+<meta name="twitter:card" content="summary">
+<title>高中蹭饭图生成器</title>
+<style>
+{{STYLE}}
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- ================= 顶部工具栏 ================= -->
+  <header id="toolbar">
+    <div class="tb-brand">🍚 蹭饭图</div>
+    <div class="tb-group">
+      <span class="tb-label">名单</span>
+      <button id="btnImportExcel" title="导入 Excel/CSV 名单">导入Excel</button>
+      <button id="btnAddRow" title="在名单表中新增一行">+手动录入</button>
+    </div>
+    <div class="tb-group">
+      <span class="tb-label">分数线</span>
+      <button id="btnWebSearch" title="联网搜索各院校在本省的最低录取线">网页搜索</button>
+      <button id="btnAiQuery" title="生成 Prompt 复制到任意 AI 网站，再粘贴结果">AI查询</button>
+      <button id="btnScoreCsv" title="导入分数线 CSV 文件">导入CSV</button>
+    </div>
+    <div class="tb-group">
+      <span class="tb-label">布局</span>
+      <button id="btnAutoLayout" title="按当前数据重新自动排版">自动布局</button>
+      <button id="btnAddText" title="新增一个自由文本框">+文本框</button>
+      <button id="btnGrid" title="显示/隐藏网格参考线">网格</button>
+      <button id="btnResetLayout" title="放弃手动调整，恢复自动布局">恢复默认</button>
+    </div>
+    <div class="tb-group">
+      <span class="tb-label">项目</span>
+      <button id="btnSaveProj" title="保存到浏览器本地">保存</button>
+      <button id="btnLoadProj" title="读取浏览器本地保存">读取</button>
+      <button id="btnTpl" title="布局模板：另存 / 套用（跨年复用）">模板</button>
+    </div>
+    <div class="tb-group">
+      <span class="tb-label">导出</span>
+      <button id="btnPng1" title="导出 1 倍 PNG 图片">PNG×1</button>
+      <button id="btnPng2" title="导出 2 倍 PNG 图片">PNG×2</button>
+      <button id="btnPng4" title="导出 4 倍 PNG 图片（大图打印）">PNG×4</button>
+      <button id="btnPdf" title="导出 PDF 文件">PDF</button>
+      <button id="btnPrint" title="浏览器直接打印 / 另存为 PDF">打印</button>
+    </div>
+    <div class="tb-spacer"></div>
+    <div class="tb-group tb-zoom">
+      <button id="btnZoomOut">−</button>
+      <span id="zoomLabel">100%</span>
+      <button id="btnZoomIn">＋</button>
+      <button id="btnZoomFit" title="适应窗口">适应</button>
+    </div>
+  </header>
+
+  <div id="main">
+    <!-- ================= 左侧设置面板 ================= -->
+    <aside id="panel">
+      <nav id="tabs">
+        <button data-tab="tabInfo" class="active">班级信息</button>
+        <button data-tab="tabRoster">名单</button>
+        <button data-tab="tabScore">分数线</button>
+        <button data-tab="tabLook">外观</button>
+        <button data-tab="tabMap">地图</button>
+      </nav>
+
+      <div class="tab-pane active" id="tabInfo">
+        <label>标题（海报大标题）</label>
+        <textarea id="inTitle" rows="2" placeholder="如：XX中学2026届高三(1)班 蹭饭图"></textarea>
+        <div class="row2">
+          <div><label>届次（年份）</label><input id="inYear" placeholder="2026"></div>
+          <div><label>班级</label><input id="inClass" placeholder="高三(1)班"></div>
+        </div>
+        <label>高中学校名称</label>
+        <input id="inSchool" placeholder="如：北京市第二中学">
+        <div class="row2">
+          <div><label>高中所在省份</label><select id="inProv"></select></div>
+          <div><label>高中所在城市</label><input id="inCity" placeholder="如：北京"></div>
+        </div>
+        <label>任课老师姓名（多人用顿号或换行分隔）</label>
+        <textarea id="inTeachers" rows="2" placeholder="如：张老师、李老师、王老师"></textarea>
+        <label>备注 / 寄语（可选）</label>
+        <textarea id="inNotes" rows="3" placeholder="可留空，显示在海报底部信息框中"></textarea>
+        <p class="tip">分数线排序依据为「院校在本省（高中所在省份）的最低录取线」，请先正确选择高中所在省份。</p>
+      </div>
+
+      <div class="tab-pane" id="tabRoster">
+        <div class="pane-actions">
+          <button id="btnRosterAdd" class="sm">＋添加一行</button>
+          <button id="btnRosterClear" class="sm danger">清空</button>
+          <span id="rosterStat" class="stat"></span>
+        </div>
+        <div id="rosterWrap">
+          <table id="rosterTable">
+            <thead><tr><th style="width:30%">姓名</th><th>录取院校</th><th style="width:24%">省份</th><th style="width:26px"></th></tr></thead>
+            <tbody id="rosterBody"></tbody>
+          </table>
+        </div>
+        <p class="tip">省份自动识别；识别失败显示「待补全」，点击可手动选择或用 AI 补全。分数线统一在「分数线」页签维护，省内排序也依据该页数据。</p>
+      </div>
+
+      <div class="tab-pane" id="tabScore">
+        <div class="pane-actions">
+          <button id="btnScoreWeb2" class="sm">网页搜索</button>
+          <button id="btnScoreAi2" class="sm">AI查询</button>
+          <button id="btnScoreCsv2" class="sm">导入CSV</button>
+          <button id="btnScoreClear" class="sm danger">清空缓存</button>
+        </div>
+        <p class="tip">按「院校｜本省｜届次」缓存于浏览器本地。双击分数格可手动修改。</p>
+        <table id="scoreTable">
+          <thead><tr><th>录取院校</th><th style="width:74px">分数线</th><th style="width:52px">来源</th><th style="width:26px"></th></tr></thead>
+          <tbody id="scoreBody"></tbody>
+        </table>
+      </div>
+
+      <div class="tab-pane" id="tabLook">
+        <label>配色主题（点击应用）</label>
+        <div id="themeCards" class="theme-cards"></div>
+        <label>自定义颜色</label>
+        <div class="row2">
+          <div class="colorRow"><span>主色（地图最深）</span><input type="color" id="cBase"></div>
+          <div class="colorRow"><span>辅色（栏目头）</span><input type="color" id="cAccent"></div>
+        </div>
+        <div class="row2">
+          <div class="colorRow"><span>背景色</span><input type="color" id="cBg"></div>
+          <div class="colorRow"><span>强调色（标题）</span><input type="color" id="cEmph"></div>
+        </div>
+        <div class="colorRow"><span>地图浅色</span><input type="color" id="cLow"></div>
+        <div class="sliderRow">
+          <label>颜色深浅敏感度 γ <b id="gammaVal">0.75</b></label>
+          <input type="range" id="rGamma" min="0.3" max="1.6" step="0.05">
+        </div>
+        <label>字体</label>
+        <select id="selFont"></select>
+        <div class="preview" id="fontPreview">心怀远方，顶峰相见 2026</div>
+        <label>标题艺术字风格</label>
+        <div id="artCards" class="art-cards"></div>
+        <label>背景图片</label>
+        <div class="pane-actions">
+          <button id="btnBgPick" class="sm">选择图片…</button>
+          <button id="btnBgClear" class="sm danger">移除背景</button>
+        </div>
+        <input type="file" id="fileBg" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp,image/svg+xml" hidden>
+        <div class="row2">
+          <div><label>显示方式</label><select id="selBgMode">
+            <option value="cover">铺满（裁切）</option>
+            <option value="contain">完整显示</option>
+            <option value="repeat">平铺</option>
+          </select></div>
+          <div class="sliderRow"><label>背景透明度 <b id="bgOpVal">100%</b></label><input type="range" id="rBgOp" min="5" max="100" step="5"></div>
+        </div>
+        <label>元素不透明度</label>
+        <div class="sliderRow"><label>一键调整全部元素 <b id="elOpVal">100%</b></label><input type="range" id="rElOp" min="10" max="100" step="5"></div>
+        <p class="tip">单独调整：点击选中海报中的元素，在右侧「属性面板」中修改不透明度。</p>
+        <label>省份栏头样式</label>
+        <div id="headCards" class="cell-cards"></div>
+        <div class="row2">
+          <div class="sliderRow"><label>圆角 <b id="headRadVal">6</b></label><input type="range" id="rHeadRad" min="0" max="20" step="1"></div>
+          <div class="colorRow"><span>头背景</span><input type="color" id="cHeadBg"></div>
+          <div class="colorRow"><span>头文字</span><input type="color" id="cHeadFg"></div>
+        </div>
+        <label>名单行样式</label>
+        <div id="rowCards" class="cell-cards"></div>
+        <div class="row2">
+          <div class="colorRow"><span>分隔线</span><input type="color" id="cRowSep"></div>
+          <div class="sliderRow"><label>线宽 <b id="rowSepWVal">1</b></label><input type="range" id="rRowSepW" min="1" max="4" step="1"></div>
+        </div>
+        <div class="row2">
+          <div class="colorRow"><span>斑马纹</span><input type="color" id="cZebra"></div>
+          <div class="sliderRow"><label>行圆角 <b id="rowRadVal">4</b></label><input type="range" id="rRowRad" min="0" max="12" step="1"></div>
+        </div>
+        <label>画布尺寸</label>
+        <div class="row2">
+          <select id="selCanvas">
+            <option value="A4">A4 竖版 (1240×1754)</option>
+            <option value="A3">A3 竖版 (1754×2480)</option>
+            <option value="169">16:9 横版 (1600×900)</option>
+            <option value="114">1:1.414 比例（按当前宽度换算）</option>
+            <option value="custom">自定义（以下方宽高为准）</option>
+          </select>
+          <div><input type="number" id="inCw" style="width:70px"> × <input type="number" id="inCh" style="width:70px"></div>
+        </div>
+        <label>排版参数</label>
+        <div class="row2">
+          <div class="sliderRow"><label>页边距 <b id="marginVal">28</b></label><input type="range" id="rMargin" min="8" max="80" step="2"></div>
+          <div class="sliderRow"><label>栏目宽 <b id="blockWVal">210</b></label><input type="range" id="rBlockW" min="150" max="330" step="5"></div>
+        </div>
+        <div class="row2">
+          <div class="sliderRow"><label>行间距 <b id="rowGapVal">3</b></label><input type="range" id="rRowGap" min="0" max="12" step="1"></div>
+          <div class="checkRow"><label><input type="checkbox" id="ckScore"> 行内显示分数线</label></div>
+        </div>
+        <div class="checkRow"><label><input type="checkbox" id="ckRegion"> 省份栏按地理大区排序（默认按人数降序）</label></div>
+        <div class="checkRow"><label><input type="checkbox" id="ckSnap" checked> 拖拽吸附对齐</label></div>
+      </div>
+
+      <div class="tab-pane" id="tabMap">
+        <label>地图显示</label>
+        <div class="checkRow"><label><input type="checkbox" id="ckInset" checked> 右下角显示南海诸岛小图</label></div>
+        <div class="sliderRow"><label>南海小图尺寸 <b id="insetVal">26%</b></label><input type="range" id="rInset" min="16" max="40" step="1"></div>
+        <label>地图角度与样式</label>
+        <div id="angleCards" class="cell-cards"></div>
+        <div class="row2">
+          <div class="sliderRow"><label>俯仰角 <b id="tiltVal">0°</b></label><input type="range" id="rTilt" min="0" max="70" step="2"></div>
+          <div class="sliderRow"><label>侧转 <b id="rotVal">0°</b></label><input type="range" id="rRot" min="-25" max="25" step="1"></div>
+        </div>
+        <label>重点强调</label>
+        <div class="pane-actions">
+          <label class="checkRow"><input type="checkbox" id="ckFocus"> 缩放聚焦到有学生的省份</label>
+          <button id="btnFocusNow" class="sm">重新聚焦</button>
+        </div>
+        <label>地图缩放与平移（微调）<span id="focusLockTip" class="focusLockTip" hidden>聚焦中已锁定，取消聚焦后可调</span></label>
+        <div class="sliderRow"><label>缩放 <b id="mapZoomVal">1.00</b></label><input type="range" id="rMapZoom" min="0.3" max="6" step="0.02"></div>
+        <div class="row2">
+          <div class="sliderRow"><label>左右 <b id="mapOxVal">0</b></label><input type="range" id="rMapOx" min="-600" max="600" step="2"></div>
+          <div class="sliderRow"><label>上下 <b id="mapOyVal">0</b></label><input type="range" id="rMapOy" min="-600" max="600" step="2"></div>
+        </div>
+        <button id="btnMapReset" class="sm">恢复地图默认视角</button>
+        <label>引线样式</label>
+        <div class="row2">
+          <div class="sliderRow"><label>线宽 <b id="lineWVal">1.5</b></label><input type="range" id="rLineW" min="0.5" max="4" step="0.5"></div>
+          <div class="sliderRow"><label>透明度 <b id="lineOVal">0.55</b></label><input type="range" id="rLineO" min="0.1" max="1" step="0.05"></div>
+        </div>
+        <p class="tip">省份文字块默认全部外置于地图，引线指向对应省份；选中文字块后可自由拖动，引线自动重算。</p>
+      </div>
+    </aside>
+
+    <!-- ================= 中间画布 ================= -->
+    <section id="stageWrap">
+      <div id="stage">
+        <div id="poster">
+          <div id="bgImg"></div>
+          <svg id="lines" xmlns="http://www.w3.org/2000/svg"></svg>
+          <!-- 元素由 JS 注入 -->
+        </div>
+      </div>
+      <div id="gridOverlay" hidden></div>
+    </section>
+
+    <!-- ================= 右侧属性面板 ================= -->
+    <div id="propPanel" hidden>
+      <div class="pp-head"><span id="ppTitle">元素属性</span><button id="ppClose">×</button></div>
+      <div class="pp-body">
+        <div class="row2"><div><label>X</label><input type="number" id="ppX"></div><div><label>Y</label><input type="number" id="ppY"></div></div>
+        <div class="row2"><div><label>宽</label><input type="number" id="ppW"></div><div><label>高</label><input type="number" id="ppH"></div></div>
+        <div id="ppTextSec">
+          <div class="row2"><div><label>字号</label><input type="number" id="ppFont" min="6" max="200"></div><div><label>行高</label><input type="number" id="ppLh" step="0.05" min="0.8" max="3"></div></div>
+          <div class="row2"><div><label>颜色</label><input type="color" id="ppColor"></div><div><label>背景</label><input type="color" id="ppBg"></div></div>
+          <div class="checkRow"><label><input type="checkbox" id="ppBgNone"> 无背景（跟随海报）</label></div>
+        </div>
+        <div class="sliderRow"><label>不透明度 <b id="ppOpVal">100%</b></label><input type="range" id="ppOp" min="5" max="100" step="5"></div>
+        <label>自由文本内容（仅“文本框”可编辑）</label>
+        <textarea id="ppContent" rows="3" placeholder="选中文本框后在此输入"></textarea>
+        <div class="pp-ops">
+          <button id="ppFront" class="sm">置顶</button>
+          <button id="ppBack" class="sm">置底</button>
+          <button id="ppLock" class="sm">锁定</button>
+          <button id="ppHide" class="sm danger">隐藏</button>
+        </div>
+        <p class="tip">方向键微调 1px，Shift+方向键 10px；Esc 取消选择。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 状态栏 ================= -->
+  <footer id="statusbar">
+    <span id="stInfo">未导入数据</span>
+    <span class="st-spacer"></span>
+    <span id="stSel"></span>
+    <span id="stSave">自动保存：开</span>
+  </footer>
+</div>
+
+<!-- ================= 弹窗 ================= -->
+<div class="modal-back" id="modalBack" hidden>
+  <!-- 导入列映射 -->
+  <div class="modal" id="dlgImport" hidden>
+    <div class="m-head">导入名单 — 确认识别结果<button class="m-close">×</button></div>
+    <div class="m-body">
+      <p id="impSummary" class="m-sum"></p>
+      <table class="map-table"><thead><tr><th>列（前5行预览）</th><th style="width:130px">识别为</th></tr></thead><tbody id="impCols"></tbody></table>
+      <p class="tip">若识别有误请手动改选；“不使用”表示忽略该列。</p>
+    </div>
+    <div class="m-foot"><button class="m-close">取消</button><button id="btnImpOk" class="primary">导入</button></div>
+  </div>
+
+  <!-- 未知省份补全 -->
+  <div class="modal" id="dlgProv" hidden>
+    <div class="m-head">省份补全<button class="m-close">×</button></div>
+    <div class="m-body">
+      <p class="m-sum">以下院校无法自动识别所在省份，请选择；或复制提示词到任意 AI 网站查询后粘贴。</p>
+      <div class="pane-actions">
+        <button id="btnProvAi" class="sm">复制AI提示词</button>
+        <button id="btnProvPaste" class="sm">粘贴AI结果</button>
+      </div>
+      <table class="map-table"><thead><tr><th>院校</th><th style="width:150px">省份</th></tr></thead><tbody id="provRows"></tbody></table>
+    </div>
+    <div class="m-foot"><button class="m-close">取消</button><button id="btnProvOk" class="primary">确定</button></div>
+  </div>
+
+  <!-- 网页搜索分数线 -->
+  <div class="modal wide" id="dlgSearch" hidden>
+    <div class="m-head">网页搜索录取分数线<button class="m-close">×</button></div>
+    <div class="m-body">
+      <p class="m-sum" id="srchSum"></p>
+      <div class="pane-actions"><button id="btnSrchGo" class="sm primary">开始搜索</button><span id="srchProg" class="stat"></span></div>
+      <table class="map-table"><thead><tr><th>院校</th><th style="width:96px">候选分数</th><th>来源摘要（可改可留空）</th></tr></thead><tbody id="srchRows"></tbody></table>
+      <p class="tip">结果经公共代理抓取，可能不稳定；请核对后再使用，未查到的可留空手动填。</p>
+    </div>
+    <div class="m-foot"><button class="m-close">取消</button><button id="btnSrchOk" class="primary">应用到名单</button></div>
+  </div>
+
+  <!-- AI 查询 -->
+  <div class="modal wide" id="dlgAi" hidden>
+    <div class="m-head">AI 查询分数线（手动复制模式）<button class="m-close">×</button></div>
+    <div class="m-body">
+      <p class="m-sum">① 复制下方提示词 → ② 粘贴到任意 AI 对话网站 → ③ 把返回的 JSON 粘贴到下方，点解析。</p>
+      <textarea id="aiPrompt" rows="7" readonly></textarea>
+      <div class="pane-actions"><button id="btnAiCopy" class="sm primary">复制提示词</button></div>
+      <label>粘贴 AI 返回结果（JSON / Markdown 表格均可）：</label>
+      <textarea id="aiResult" rows="6" placeholder='[{"院校":"清华大学","分数":690}] 或直接粘贴 Markdown 表格'></textarea>
+      <div class="pane-actions"><button id="btnAiParse" class="sm">解析并预览</button><span id="aiStat" class="stat"></span></div>
+      <table class="map-table"><thead><tr><th>院校</th><th style="width:96px">分数</th><th style="width:60px">采用</th></tr></thead><tbody id="aiRows"></tbody></table>
+    </div>
+    <div class="m-foot"><button class="m-close">取消</button><button id="btnAiOk" class="primary">应用到名单</button></div>
+  </div>
+
+  <!-- 模板 / 项目 -->
+  <div class="modal" id="dlgTpl" hidden>
+    <div class="m-head">布局模板 / 项目管理<button class="m-close">×</button></div>
+    <div class="m-body">
+      <label>保存当前布局+外观为模板</label>
+      <div class="pane-actions"><input id="tplName" placeholder="模板名称，如：2026届1班"><button id="btnTplSave" class="sm primary">另存模板</button></div>
+      <label>套用已保存模板（仅布局与外观，不含名单）</label>
+      <div id="tplList" class="tpl-list"></div>
+      <p class="tip">项目（含名单数据）由工具栏「保存 / 读取」管理，存于浏览器 localStorage。</p>
+    </div>
+    <div class="m-foot"><button class="m-close">关闭</button></div>
+  </div>
+
+  <div class="modal" id="dlgConfirm" hidden>
+    <div class="m-head" id="cfTitle">确认</div>
+    <div class="m-body"><p class="m-sum" id="cfMsg"></p></div>
+    <div class="m-foot"><button id="cfNo" class="m-close">取消</button><button id="cfYes" class="primary">确定</button></div>
+  </div>
+
+  <div id="toast"></div>
+</div>
+
+<input type="file" id="fileExcel" accept=".xls,.xlsx,.csv" hidden>
+<input type="file" id="fileScoreCsv" accept=".csv,.xls,.xlsx" hidden>
+
+<script>{{ECHARTS}}</script>
+<script>{{XLSX}}</script>
+<script>{{H2C}}</script>
+<script>{{JSPDF}}</script>
+<script>window.CHINA_GEO={{GEO}};</script>
+<script>{{JS_DATA}}</script>
+<script>{{JS_MODEL}}</script>
+<script>{{JS_EXCEL}}</script>
+<script>{{JS_MAP}}</script>
+<script>{{JS_RENDER}}</script>
+<script>{{JS_EDITOR}}</script>
+<script>{{JS_IO}}</script>
+</body>
+</html>
